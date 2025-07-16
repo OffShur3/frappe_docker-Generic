@@ -22,11 +22,11 @@ To play in an already set up sandbox, in your browser, click the button below:
 First clone the repo:
 
 ```sh
-git clone https://github.com/frappe/frappe_docker
-cd frappe_docker
+git clone https://github.com/OffShur3/frappe_docker-Generic
+cd frappe_docker-Generic
 ```
 
-Then run: `docker compose -f pwd.yml up -d`
+Then run: `./frappe_generic.sh`
 
 ### To run on ARM64 architecture follow this instructions
 
