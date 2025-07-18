@@ -1,21 +1,23 @@
 #!/bin/bash
 
-#Dependencies
+# === Verificar si estás en la raíz del repositorio Git ===
+if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+  repo_root=$(git rev-parse --show-toplevel)
+  current_dir=$(pwd)
 
-# Verificar si Nix está instalado
-if ! command -v nix-env &> /dev/null
-then
-  echo "Nix no está instalado. Instalando Nix"
-  curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install --no-confirm
+  if [ "$repo_root" != "$current_dir" ]; then
+    echo "❌ No estás en la raíz del repositorio Git."
+    echo "📍 Estás en: $current_dir"
+    echo "🔝 Raíz del repo: $repo_root"
+    echo "🛑 Por favor, ejecutá este script desde la raíz del repo."
+    exit 1
+  else
+    echo "✅ Estás en la raíz del repositorio Git: $repo_root"
+  fi
+else
+  echo "❌ Este directorio no está dentro de un repositorio Git."
+  exit 1
 fi
-
-# Verificar si fzf está instalado
-if ! command -v fzf &> /dev/null
-then
-    echo "fzf no está instalado. Instalando fzf..."
-    nix-env -iA nixpkgs.fzf
-fi
-
 
 # === Verificar si Portainer está desplegado ===
 if ! docker service ls | grep -q "portainer_portainer"; then
@@ -51,10 +53,14 @@ else
   echo "✅ Portainer ya está desplegado. Continuando..."
 fi
 
-# === Continuar con el resto del script original ===
+# === Continuar con el despliegue de Frappe ERP ===
 
-git clone https://github.com/OffShur3/frappe_docker-Generic
-cd frappe_docker-Generic
+# Clonar el repo si no existe
+REPO_DIR="frappe_docker-Generic"
+if [ ! -d "$REPO_DIR" ]; then
+  git clone https://github.com/OffShur3/frappe_docker-Generic
+fi
+cd "$REPO_DIR" || exit 1
 
 RESERVED_PORTS=(22 25 53 443 3306 5432 6379 8000 8443 9000)
 TEMPLATE="pwd.yml"
@@ -77,6 +83,7 @@ function is_valid_name() {
   [[ "$1" =~ ^[a-zA-Z0-9_-]+$ ]]
 }
 
+# Preguntar nombre de la instancia
 while true; do
   read -p "Nombre del proyecto/instancia (sin espacios, solo letras, números, guiones o guiones bajos): " PROJECT_NAME
   if [[ -z "$PROJECT_NAME" ]]; then
@@ -90,6 +97,7 @@ while true; do
   break
 done
 
+# Puerto para frontend
 while true; do
   read -p "Puerto a usar para el acceso web (evitar puertos comunes): " CUSTOM_PORT
   if ! [[ "$CUSTOM_PORT" =~ ^[0-9]+$ ]]; then
@@ -107,10 +115,16 @@ while true; do
   break
 done
 
-OUTPUT_FILE="docker-compose-${PROJECT_NAME}.yml"
+# Generar stack y red personalizada
+OUTPUT_FILE="stack-${PROJECT_NAME}.yml"
 sed "s/frappe_network/${PROJECT_NAME}_net/g; s/8080:8080/${CUSTOM_PORT}:8080/g" "$TEMPLATE" > "$OUTPUT_FILE"
 
-echo "✅ Archivo generado: $OUTPUT_FILE"
-echo "👉 Para levantar la instancia, se usó:"
-echo "   docker compose -p ${PROJECT_NAME} -f ${OUTPUT_FILE} up -d"
-docker compose -p ${PROJECT_NAME} -f ${OUTPUT_FILE} up -d
+echo "✅ Stack generado: $OUTPUT_FILE"
+echo "🧠 Creando red overlay si no existe: ${PROJECT_NAME}_net"
+docker network inspect "${PROJECT_NAME}_net" >/dev/null 2>&1 || docker network create --driver overlay "${PROJECT_NAME}_net"
+
+# Deploy del stack usando Swarm
+echo "🚀 Desplegando stack con nombre '$PROJECT_NAME'..."
+docker stack deploy -c "$OUTPUT_FILE" "$PROJECT_NAME"
+
+echo "✅ Despliegue completado. Accedé en http://localhost:$CUSTOM_PORT"
