@@ -1,5 +1,22 @@
 #!/bin/bash
 
+#Dependencies
+
+# Verificar si Nix está instalado
+if ! command -v nix-env &> /dev/null
+then
+  echo "Nix no está instalado. Instalando Nix"
+  curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install --no-confirm
+fi
+
+# Verificar si fzf está instalado
+if ! command -v fzf &> /dev/null
+then
+    echo "fzf no está instalado. Instalando fzf..."
+    nix-env -iA nixpkgs.fzf
+fi
+
+
 # === Verificar si Portainer está desplegado ===
 if ! docker service ls | grep -q "portainer_portainer"; then
   echo "🔍 Portainer no está desplegado. Procediendo con instalación..."
