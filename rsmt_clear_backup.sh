@@ -29,7 +29,7 @@ echo "🛑 Deteniendo docker compose..."
 docker compose -p "$PROYECTNAME" -f "$COMPOSE_FILE" down
 
 # === SELECCIONAR VOLUMEN ===
-vol_dir=$(find "$BASE"/"$PROJECT_NAME"_* -maxdepth 0 -type d | fzf --prompt="🔍 Elegí el volumen a restaurar: ")
+vol_dir=$(find "$BASE"/"$PROYECTNAME"_* -maxdepth 0 -type d | fzf --prompt="🔍 Elegí el volumen a restaurar: ")
 [[ -z "$vol_dir" ]] && { echo "❌ No se seleccionó volumen."; exit 1; }
 
 # === SELECCIONAR SNAPSHOT ===
@@ -58,4 +58,4 @@ echo "sudo btrfs subvolume snapshot $vol_dir/_data.bak.$timestamp $vol_dir/_data
 
 # === INICIAR CONTENEDORES NUEVAMENTE ===
 echo "🚀 Levantando servicios Docker..."
-docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" up -d
+docker compose -p "$PROYECTNAME" -f "$COMPOSE_FILE" up -d

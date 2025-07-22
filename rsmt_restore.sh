@@ -16,7 +16,7 @@ echo "📂 Proyecto: $PROYECTNAME"
 BASE="/var/lib/docker/volumes"
 
 # Ruta del archivo docker-compose
-COMPOSE_FILE="/home/matias/composes/frappe_docker-Generic/docker-compose-${PROYECTNAME}.yml"
+COMPOSE_FILE="/home/matias/composes/frappe_docker-Generic/docker-compose-"$PROYECTNAME".yml"
 
 # === DEPENDENCIAS ===
 command -v fzf >/dev/null 2>&1 || {
@@ -26,10 +26,10 @@ command -v fzf >/dev/null 2>&1 || {
 
 # === DETENER CONTENEDORES ===
 echo "🛑 Deteniendo docker compose..."
-docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" down
+docker compose -p "$PROYECTNAME" -f "$COMPOSE_FILE" down
 
 # === SELECCIONAR VOLUMEN ===
-vol_dir=$(find "$BASE"/"$PROJECT_NAME"_* -maxdepth 0 -type d | fzf --prompt="🔍 Elegí el volumen a restaurar: ")
+vol_dir=$(find "$BASE"/"$PROYECTNAME"_* -maxdepth 0 -type d | fzf --prompt="🔍 Elegí el volumen a restaurar: ")
 [[ -z "$vol_dir" ]] && { echo "❌ No se seleccionó volumen."; exit 1; }
 
 # === SELECCIONAR SNAPSHOT ===
@@ -58,4 +58,4 @@ echo "sudo btrfs subvolume snapshot $vol_dir/_data.bak.$timestamp $vol_dir/_data
 
 # === INICIAR CONTENEDORES NUEVAMENTE ===
 echo "🚀 Levantando servicios Docker..."
-docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" up -d
+docker compose -p "$PROYECTNAME" -f "$COMPOSE_FILE" up -d
