@@ -1,46 +1,61 @@
 #!/bin/bash
 
 set -euo pipefail
-BASE="/var/lib/docker/volumes"
 
-docker compose -p rsmt -f /home/matias/composes/frappe_docker-Generic/docker-compose-rsmt.yml down
-
-# 🏷️ Obtener nombre del snapshot
-if [ $# -ge 1 ]; then
-    NAME="$1"
-else
-    read -p "¿Nombre del snapshot? (enter para usar la fecha de hoy): " NAME
-    NAME="${NAME:-$(date +%F)}"
+# === CONFIGURACIÓN ===
+if [ $# -lt 1 ]; then
+    echo "❌ Debes pasar el nombre del proyecto como primer argumento."
+    echo "Uso: $0 <nombre_proyecto> [nombre_snapshot]"
+    exit 1
 fi
 
-echo "📦 Iniciando backup con nombre: $NAME..."
+PROYECTNAME="$1"
+echo "📂 Proyecto: $PROYECTNAME"
 
-for dir in "$BASE"/rsmt_*; do
-    vol_name=$(basename "$dir")
-    data_dir="$dir/_data"
-    snap_dir="$dir/snapshots/$NAME"
+# Directorio base de volúmenes Docker
+BASE="/var/lib/docker/volumes"
 
-    [[ -d "$data_dir" ]] || continue
+# Ruta del archivo docker-compose
+COMPOSE_FILE="/home/matias/composes/frappe_docker-Generic/docker-compose-${PROYECTNAME}.yml"
 
-    # Convertir en subvolumen si no lo es
-    if ! btrfs subvolume show "$data_dir" &>/dev/null; then
-        echo "🔧 Convirtiendo $data_dir en subvolumen..."
-        tmp="$dir/_data.bak.$RANDOM"
-        mv "$data_dir" "$tmp"
-        btrfs subvolume create "$data_dir"
-        cp -a "$tmp"/. "$data_dir"/
-        rm -rf "$tmp"
-    fi
+# === DEPENDENCIAS ===
+command -v fzf >/dev/null 2>&1 || {
+  echo "❌ fzf no está instalado. Instalalo con: sudo zypper install fzf"
+  exit 1
+}
 
-    mkdir -p "$(dirname "$snap_dir")"
+# === DETENER CONTENEDORES ===
+echo "🛑 Deteniendo docker compose..."
+docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" down
 
-    if [ ! -d "$snap_dir" ]; then
-        echo "📸 Creando snapshot para $vol_name → $snap_dir"
-        btrfs subvolume snapshot "$data_dir" "$snap_dir"
-    else
-        echo "✅ Ya existe: $snap_dir"
-    fi
-done
+# === SELECCIONAR VOLUMEN ===
+vol_dir=$(find "$BASE"/"$PROJECT_NAME"_* -maxdepth 0 -type d | fzf --prompt="🔍 Elegí el volumen a restaurar: ")
+[[ -z "$vol_dir" ]] && { echo "❌ No se seleccionó volumen."; exit 1; }
 
-echo "✅ Backup finalizado."
-docker compose -p rsmt -f /home/matias/composes/frappe_docker-Generic/docker-compose-rsmt.yml up -d
+# === SELECCIONAR SNAPSHOT ===
+snap_dir=$(find "$vol_dir/snapshots"/* -maxdepth 0 -type d 2>/dev/null | fzf --prompt="📸 Elegí el snapshot para restaurar: ")
+[[ -z "$snap_dir" ]] && { echo "❌ No se seleccionó snapshot."; exit 1; }
+
+# === CONFIRMAR ===
+echo "⚠️ Se restaurará el snapshot: $(basename "$snap_dir") en el volumen: $(basename "$vol_dir")"
+read -p "¿Confirmás la restauración? Esto reemplazará completamente el subvolumen _data. (s/N): " conf
+[[ "$conf" =~ ^[Ss]$ ]] || exit 0
+
+# === BACKUP Y RESTAURACIÓN ===
+timestamp=$(date +%s)
+echo "📦 Moviendo _data actual a _data.bak.$timestamp"
+mv "$vol_dir/_data" "$vol_dir/_data.bak.$timestamp"
+
+echo "🔁 Restaurando snapshot..."
+btrfs subvolume snapshot "$snap_dir" "$vol_dir/_data"
+
+echo "✅ Restauración completada."
+echo "📁 Backup anterior guardado en: $vol_dir/_data.bak.$timestamp"
+
+echo ""
+echo "📌 Para volver al estado anterior, podés ejecutar:"
+echo "sudo btrfs subvolume snapshot $vol_dir/_data.bak.$timestamp $vol_dir/_data"
+
+# === INICIAR CONTENEDORES NUEVAMENTE ===
+echo "🚀 Levantando servicios Docker..."
+docker compose -p "$PROJECT_NAME" -f "$COMPOSE_FILE" up -d
